@@ -119,6 +119,12 @@ namespace Unity.Notifications.Android
         /// Sets the vibration pattern for notifications posted to this channel.
         /// </summary>
         public long[] VibrationPattern { get; set; }
+        
+        
+        /// <summary>
+        /// Assign SFX for this channel.
+        /// </summary>
+        public string SoundFileName { get; set; }
 
         /// <summary>
         /// Sets whether or not notifications posted to this channel are shown on the lockscreen in full or redacted form.
@@ -154,6 +160,7 @@ namespace Unity.Notifications.Android
             EnableLights = false;
             EnableVibration = true;
             VibrationPattern = null;
+            SoundFileName = null;
 
             this.LockScreenVisibility = LockScreenVisibility.Public;
         }

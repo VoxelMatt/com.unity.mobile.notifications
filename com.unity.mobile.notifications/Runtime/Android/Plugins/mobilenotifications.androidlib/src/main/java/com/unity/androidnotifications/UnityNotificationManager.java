@@ -18,6 +18,7 @@ import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.AudioAttributes;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -26,6 +27,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
+import androidx.documentfile.provider.DocumentFile;
 
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
@@ -129,6 +131,19 @@ public class UnityNotificationManager extends BroadcastReceiver {
         mUnityNotificationManager.initialize(activity, notificationCallback);
         return mUnityNotificationManager;
     }
+    
+    public String convertResourcesString(String value)
+    {
+        if (value.startsWith("@"))
+        {
+            int resourceId = mContext.getResources().getIdentifier(value, "values", mContext.getPackageName());
+            if (resourceId != 0)
+            {
+                return mContext.getResources().getString(resourceId);
+            }
+        }
+        return value;
+    }
 
     private Bundle getAppMetadata() {
         try {
@@ -191,11 +206,12 @@ public class UnityNotificationManager extends BroadcastReceiver {
             boolean canBypassDnd,
             boolean canShowBadge,
             long[] vibrationPattern,
+            String soundFileNameInRaw,
             int lockscreenVisibility,
             String group) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(id, name, importance);
-            channel.setDescription(description);
+            NotificationChannel channel = new NotificationChannel(id, convertResourcesString(name), importance);
+            channel.setDescription(convertResourcesString(description));
             channel.enableLights(enableLights);
             channel.enableVibration(enableVibration);
             channel.setBypassDnd(canBypassDnd);
@@ -203,6 +219,23 @@ public class UnityNotificationManager extends BroadcastReceiver {
             channel.setVibrationPattern(vibrationPattern);
             channel.setLockscreenVisibility(lockscreenVisibility);
             channel.setGroup(group);
+            
+            if (channel != null)
+            {
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                                      .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                                      .build();
+                String packageName = mContext.getPackageName();
+                
+                Uri soundUri = Uri.parse("android.resource://" + packageName + "/raw/" + soundFileNameInRaw);
+                if (!DocumentFile.fromSingleUri(mContext, soundUri).exists())
+                {
+                    int resourceId = mContext.getResources().getIdentifier(soundFileNameInRaw, "raw", packageName);
+                    soundUri = Uri.parse("android.resource://" + packageName + "/" + resourceId);
+                }
+    
+                channel.setSound(soundUri, audioAttributes);
+            }
 
             getNotificationManager().createNotificationChannel(channel);
         } else {
@@ -219,14 +252,15 @@ public class UnityNotificationManager extends BroadcastReceiver {
             SharedPreferences channelPrefs = mContext.getSharedPreferences(getSharedPrefsNameByChannelId(id), Context.MODE_PRIVATE);
             editor = channelPrefs.edit();
 
-            editor.putString("title", name); // Sadly I can't change the "title" here to "name" due to backward compatibility.
+            editor.putString("title", convertResourcesString(name)); // Sadly I can't change the "title" here to "name" due to backward compatibility.
             editor.putInt("importance", importance);
-            editor.putString("description", description);
+            editor.putString("description", convertResourcesString(description));
             editor.putBoolean("enableLights", enableLights);
             editor.putBoolean("enableVibration", enableVibration);
             editor.putBoolean("canBypassDnd", canBypassDnd);
             editor.putBoolean("canShowBadge", canShowBadge);
             editor.putString("vibrationPattern", Arrays.toString(vibrationPattern));
+            editor.putString("soundFileNameInRaw", soundFileNameInRaw);
             editor.putInt("lockscreenVisibility", lockscreenVisibility);
             editor.putString("group", group);
 
@@ -259,6 +293,7 @@ public class UnityNotificationManager extends BroadcastReceiver {
         channel.canBypassDnd = prefs.getBoolean("canBypassDnd", false);
         channel.canShowBadge = prefs.getBoolean("canShowBadge", false);
         channel.lockscreenVisibility = prefs.getInt("lockscreenVisibility", VISIBILITY_PUBLIC);
+        channel.soundFileNameInRaw = prefs.getString("soundFileNameInRaw", "");
         channel.group = prefs.getString("group", null);
         String[] vibrationPatternStr = prefs.getString("vibrationPattern", "[]").split(",");
 
@@ -866,10 +901,29 @@ public class UnityNotificationManager extends BroadcastReceiver {
             // For device below Android O, we use the values from NotificationChannelWrapper to set visibility, priority etc.
             NotificationChannelWrapper fakeNotificationChannel = getNotificationChannel(channelID);
 
-            if (fakeNotificationChannel.vibrationPattern != null && fakeNotificationChannel.vibrationPattern.length > 0) {
-                notificationBuilder.setDefaults(Notification.DEFAULT_LIGHTS | Notification.DEFAULT_SOUND);
+            boolean hasSound = fakeNotificationChannel.hasSound();
+            boolean hasVibration = fakeNotificationChannel.vibrationPattern != null && fakeNotificationChannel.vibrationPattern.length > 0;
+
+            if (hasVibration)
+            {
+                if (hasSound)
+                {
+                    notificationBuilder.setDefaults(Notification.DEFAULT_LIGHTS);
+                    notificationBuilder.setSound(fakeNotificationChannel.getSoundUri(mContext), Notification.AUDIO_ATTRIBUTES_DEFAULT);
+                }
+                else
+                {
+                    notificationBuilder.setDefaults(Notification.DEFAULT_LIGHTS | Notification.DEFAULT_SOUND);
+                }
                 notificationBuilder.setVibrate(fakeNotificationChannel.vibrationPattern);
-            } else {
+            }
+            else if (hasSound)
+            {
+                notificationBuilder.setDefaults(Notification.DEFAULT_LIGHTS | Notification.DEFAULT_VIBRATE);
+                notificationBuilder.setSound(fakeNotificationChannel.getSoundUri(mContext), Notification.AUDIO_ATTRIBUTES_DEFAULT);
+            }
+            else
+            {
                 notificationBuilder.setDefaults(Notification.DEFAULT_ALL);
             }
 
@@ -1095,6 +1149,17 @@ class NotificationChannelWrapper {
     public boolean canShowBadge;
     public long[] vibrationPattern;
     public int lockscreenVisibility;
+    public String soundFileNameInRaw;
+    
+    public boolean hasSound()
+    {
+        return soundFileNameInRaw != null && !soundFileNameInRaw.isEmpty();
+    }
+    public Uri getSoundUri(Context context)
+    {
+        int resourceId = context.getResources().getIdentifier(soundFileNameInRaw, "raw", context.getPackageName());
+        return Uri.parse("android.resource://" + context.getPackageName() + "/" + resourceId);
+    }
     public String group;
 }
 

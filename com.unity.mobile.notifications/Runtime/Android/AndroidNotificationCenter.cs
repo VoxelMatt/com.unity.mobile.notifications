@@ -207,6 +207,7 @@ namespace Unity.Notifications.Android
                 channel.CanBypassDnd,
                 channel.CanShowBadge,
                 channel.VibrationPattern,
+                channel.SoundFileName,
                 (int)channel.LockScreenVisibility,
                 channel.Group
             );
@@ -915,6 +916,7 @@ namespace Unity.Notifications.Android
                 ch.CanBypassDnd = channel.Get<bool>("canBypassDnd");
                 ch.CanShowBadge = channel.Get<bool>("canShowBadge");
                 ch.VibrationPattern = channel.Get<long[]>("vibrationPattern");
+                ch.SoundFileName = channel.Get<string>("soundFileNameInRaw");
                 ch.LockScreenVisibility = channel.Get<int>("lockscreenVisibility").ToLockScreenVisibility();
                 ch.Group = channel.Get<string>("group");
 
