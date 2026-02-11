@@ -27,7 +27,6 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
-import androidx.documentfile.provider.DocumentFile;
 
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
@@ -227,10 +226,14 @@ public class UnityNotificationManager extends BroadcastReceiver {
                                       .build();
                 String packageName = mContext.getPackageName();
                 
-                Uri soundUri = Uri.parse("android.resource://" + packageName + "/raw/" + soundFileNameInRaw);
-                if (!DocumentFile.fromSingleUri(mContext, soundUri).exists())
+                Uri soundUri;
+                int resourceId = mContext.getResources().getIdentifier(soundFileNameInRaw, "raw", packageName);
+                if (resourceId == 0)
                 {
-                    int resourceId = mContext.getResources().getIdentifier(soundFileNameInRaw, "raw", packageName);
+                    soundUri = Uri.parse("android.resource://" + packageName + "/raw/" + soundFileNameInRaw);
+                }
+                else
+                {
                     soundUri = Uri.parse("android.resource://" + packageName + "/" + resourceId);
                 }
     

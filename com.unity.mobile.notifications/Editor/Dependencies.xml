@@ -1,6 +1,0 @@
-<dependencies>
-    <androidPackages>
-        <androidPackage spec="androidx.documentfile:documentfile:1.0.1"/>
-    </androidPackages>
-</dependencies>
-
